@@ -1,115 +1,145 @@
-import java.io.*;
-import java.net.*;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Scanner;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Main {
-    private static final String API_KEY = "iFHbWHdrLRrOQ223YivJbTvszOZ7tRC9yOdLsGHd"; // Replace with your valid API key
-    private static final String API_URL = "https://api.cohere.com/v1/chat"; // Corrected API URL
-
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        HashMap<String, String> userInfo = new HashMap<>();
 
-        // Collect user information
-        System.out.print("What is your age? ");
-        userInfo.put("Age", scanner.nextLine());
+        // Collect user inputs with options/examples
+        System.out.print("Enter your age: ");
+        int age = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
 
-        System.out.print("What is your gender? (Male/Female/Other) ");
-        userInfo.put("Gender", scanner.nextLine());
+        System.out.print("Enter your gender (Male/Female/Other): ");
+        String gender = scanner.nextLine();
 
-        System.out.print("What is your current height (in cm)? ");
-        userInfo.put("Height", scanner.nextLine());
+        System.out.print("Select your work lifestyle (Sedentary, Moderate, Active): ");
+        String workPreference = scanner.nextLine();
 
-        System.out.print("What is your current weight (in kg)? ");
-        userInfo.put("Weight", scanner.nextLine());
+        System.out.print("Rate your liking for fast food (1-10, 1=Dislike, 10=Love it): ");
+        int fastFoodRating = scanner.nextInt();
 
-        System.out.println("What are your primary fitness goals? ");
-        userInfo.put("Fitness Goals", scanner.nextLine());
+        System.out.print("Rate your overall health (1-10, 1=Poor, 10=Excellent): ");
+        int healthRating = scanner.nextInt();
 
-        // Construct prompt
-        StringBuilder userInputText = new StringBuilder();
-        userInfo.forEach((key, value) -> userInputText.append(key).append(": ").append(value).append("\n"));
-        userInputText.append("\nPlease provide two detailed plans based on the above information. ")
-                .append("The first should be a personalized diet plan, and the second should be a personalized exercise plan.");
+        System.out.print("Rate your preference to maintain body weight (1-10, 1=Not at all, 10=Very important): ");
+        int bodyWeightPreference = scanner.nextInt();
 
-        // Send request to Cohere API
+        System.out.print("Rate the importance of exercise in your life (1-10, 1=Not important, 10=Essential): ");
+        int exerciseImportance = scanner.nextInt();
+
+        System.out.print("How many meals do you have in a day (e.g., 3, 4, 5)? ");
+        int mealsPerDay = scanner.nextInt();
+
+        System.out.print("Enter your weight (in kg, e.g., 70): ");
+        int weight = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
+
+        System.out.print("What type of exercises do you prefer? (e.g., Cardio, Strength, Yoga, Pilates): ");
+        String exerciseType = scanner.nextLine();
+
+        System.out.print("How many meals contain fruits per day (e.g., 1, 2, 3)? ");
+        int fruitMeals = scanner.nextInt();
+
+        System.out.print("How many meals contain vegetables per day (e.g., 1, 2, 3)? ");
+        int vegetableMeals = scanner.nextInt();
+
+        System.out.print("How many cooked meals do you eat per day (e.g., 1, 2, 3)? ");
+        int cookedMeals = scanner.nextInt();
+
+        System.out.print("How much time do you spend in the gym per day (in minutes, e.g., 30, 60)? ");
+        int gymTime = scanner.nextInt();
+
+        scanner.nextLine(); // Consume newline
+        System.out.print("Do you suffer from any regular disease? (Yes/No): ");
+        String disease = scanner.nextLine();
+
+        String review = "";
+        if (disease.equalsIgnoreCase("Yes")) {
+            System.out.print("Please provide a short review about this survey: ");
+            review = scanner.nextLine();
+        }
+
+        // Generate a dynamic prompt based on user inputs
+        String prompt = String.format(
+                "Based on the following user information, generate a detailed personalized diet and exercise plan for 7 days(I want the complete and detailed plans for every day). " +
+                        "The user is %d years old, %s, with a %s work lifestyle. They rate their fast food preference as %d/10, " +
+                        "health as %d/10, and importance of exercise as %d/10. They have %d meals a day, prefer %s workouts, " +
+                        "consume fruits in %d meals, vegetables in %d meals, and eat %d cooked meals per day. They spend %d minutes " +
+                        "in the gym daily. The user %s suffers from a regular disease. " +
+                        "Please provide a structured and actionable diet and exercise plan tailored to their lifestyle.",
+                age, gender, workPreference, fastFoodRating, healthRating, exerciseImportance, mealsPerDay, exerciseType,
+                fruitMeals, vegetableMeals, cookedMeals, gymTime, disease.equalsIgnoreCase("Yes") ? "does" : "does not"
+        );
+
+        // Create the JSON payload
+        String payload = String.format(
+                "{\"model\": \"llama3.2\", " +
+                        "\"prompt\": \"%s\", " +
+                        "\"age\": %d, " +
+                        "\"gender\": \"%s\", " +
+                        "\"workPreference\": \"%s\", " +
+                        "\"fastFoodRating\": %d, " +
+                        "\"healthRating\": %d, " +
+                        "\"bodyWeightPreference\": %d, " +
+                        "\"exerciseImportance\": %d, " +
+                        "\"mealsPerDay\": %d, " +
+                        "\"weight\": %d, " +
+                        "\"exerciseType\": \"%s\", " +
+                        "\"fruitMeals\": %d, " +
+                        "\"vegetableMeals\": %d, " +
+                        "\"cookedMeals\": %d, " +
+                        "\"gymTime\": %d, " +
+                        "\"disease\": \"%s\", " +
+                        "\"review\": \"%s\"}",
+                prompt, age, gender, workPreference, fastFoodRating, healthRating, bodyWeightPreference, exerciseImportance,
+                mealsPerDay, weight, exerciseType, fruitMeals, vegetableMeals, cookedMeals, gymTime, disease, review
+        );
+
         try {
-            String response = sendToCohere(userInputText.toString());
-            System.out.println("\nResponse from Cohere:");
-            System.out.println(response);
+            // Send the request to the LLM API
+            String response = sendToLLM(payload);
+            System.out.println("Response from server: " + response);
         } catch (Exception e) {
-            System.out.println("An error occurred while communicating with Cohere API: " + e.getMessage());
+            System.out.println("An error occurred: " + e.getMessage());
         }
 
         scanner.close();
     }
 
-    private static String sendToCohere(String userMessage) throws IOException {
-        URL url = new URL(API_URL);
+    private static String sendToLLM(String payload) throws Exception {
+        String urlString = "http://127.0.0.1:11434/api/generate";
+        URL url = new URL(urlString);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-        // Set request properties
         connection.setDoOutput(true);
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Authorization", "Bearer " + API_KEY);
 
-        // Create JSON request body
-        JSONObject jsonRequest = new JSONObject();
-        jsonRequest.put("model", "command-r-plus-08-2024");
-
-        // Add messages array (Cohere needs a system message first)
-        JSONArray messagesArray = new JSONArray();
-        messagesArray.put(new JSONObject().put("role", "system").put("content", "You are an expert fitness and diet planner."));
-        messagesArray.put(new JSONObject().put("role", "user").put("content", userMessage));
-
-        jsonRequest.put("messages", messagesArray);
-
-        // Send request
         try (OutputStream os = connection.getOutputStream()) {
-            byte[] input = jsonRequest.toString().getBytes(StandardCharsets.UTF_8);
-            os.write(input, 0, input.length);
+            os.write(payload.getBytes(StandardCharsets.UTF_8));
         }
 
-        // Read the response
         int responseCode = connection.getResponseCode();
-        if (responseCode != 200) {
-            InputStream errorStream = connection.getErrorStream();
-            if (errorStream != null) {
-                BufferedReader errorReader = new BufferedReader(new InputStreamReader(errorStream, StandardCharsets.UTF_8));
-                StringBuilder errorResponse = new StringBuilder();
-                String line;
-                while ((line = errorReader.readLine()) != null) {
-                    errorResponse.append(line);
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            Scanner scanner = new Scanner(connection.getInputStream(), StandardCharsets.UTF_8);
+            StringBuilder responseBuilder = new StringBuilder();
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                JSONObject jsonObject = new JSONObject(line);
+                responseBuilder.append(jsonObject.getString("response"));
+                if (jsonObject.getBoolean("done")) {
+                    break;
                 }
-                throw new IOException("Server returned HTTP response code: " + responseCode + " - " + errorResponse);
             }
-            throw new IOException("Server returned HTTP response code: " + responseCode);
-        }
-
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder response = new StringBuilder();
-            String responseLine;
-            while ((responseLine = br.readLine()) != null) {
-                response.append(responseLine.trim());
-            }
-
-            // Parse response JSON
-            JSONObject jsonResponse = new JSONObject(response.toString());
-            JSONObject message = jsonResponse.getJSONObject("message");
-            JSONArray contentArray = message.getJSONArray("content");
-
-            // Extract assistant response
-            StringBuilder assistantResponse = new StringBuilder();
-            for (int i = 0; i < contentArray.length(); i++) {
-                assistantResponse.append(contentArray.getJSONObject(i).getString("text")).append("\n");
-            }
-
-            return assistantResponse.toString();
+            scanner.close();
+            return responseBuilder.toString();
+        } else {
+            throw new RuntimeException("Failed to send request. Response code: " + responseCode);
         }
     }
 }
