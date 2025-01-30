@@ -9,16 +9,34 @@ public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
-        // Collect user inputs with options/examples
+        // Collect user inputs with number-based options
         System.out.print("Enter your age: ");
         int age = scanner.nextInt();
         scanner.nextLine(); // Consume newline
 
-        System.out.print("Enter your gender (Male/Female/Other): ");
-        String gender = scanner.nextLine();
+        System.out.print("Enter your height (in cm, e.g., 170): ");
+        int height = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
 
-        System.out.print("Select your work lifestyle (Sedentary, Moderate, Active): ");
-        String workPreference = scanner.nextLine();
+        System.out.print("Enter your weight (in kg, e.g., 70): ");
+        int weight = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
+
+        System.out.println("Select your gender:");
+        System.out.println("1. Male");
+        System.out.println("2. Female");
+        System.out.println("3. Other");
+        System.out.print("Enter the number corresponding to your gender: ");
+        int genderOption = scanner.nextInt();
+        String gender = genderOption == 1 ? "Male" : genderOption == 2 ? "Female" : "Other";
+
+        System.out.println("Select your work lifestyle:");
+        System.out.println("1. Sedentary");
+        System.out.println("2. Moderate");
+        System.out.println("3. Active");
+        System.out.print("Enter the number corresponding to your work lifestyle: ");
+        int workPreferenceOption = scanner.nextInt();
+        String workPreference = workPreferenceOption == 1 ? "Sedentary" : workPreferenceOption == 2 ? "Moderate" : "Active";
 
         System.out.print("Rate your liking for fast food (1-10, 1=Dislike, 10=Love it): ");
         int fastFoodRating = scanner.nextInt();
@@ -35,12 +53,14 @@ public class Main {
         System.out.print("How many meals do you have in a day (e.g., 3, 4, 5)? ");
         int mealsPerDay = scanner.nextInt();
 
-        System.out.print("Enter your weight (in kg, e.g., 70): ");
-        int weight = scanner.nextInt();
-        scanner.nextLine(); // Consume newline
-
-        System.out.print("What type of exercises do you prefer? (e.g., Cardio, Strength, Yoga, Pilates): ");
-        String exerciseType = scanner.nextLine();
+        System.out.println("What type of exercises do you prefer?");
+        System.out.println("1. Cardio");
+        System.out.println("2. Strength");
+        System.out.println("3. Yoga");
+        System.out.println("4. Pilates");
+        System.out.print("Enter the number corresponding to your preferred exercise type: ");
+        int exerciseTypeOption = scanner.nextInt();
+        String exerciseType = exerciseTypeOption == 1 ? "Cardio" : exerciseTypeOption == 2 ? "Strength" : exerciseTypeOption == 3 ? "Yoga" : "Pilates";
 
         System.out.print("How many meals contain fruits per day (e.g., 1, 2, 3)? ");
         int fruitMeals = scanner.nextInt();
@@ -55,25 +75,62 @@ public class Main {
         int gymTime = scanner.nextInt();
 
         scanner.nextLine(); // Consume newline
-        System.out.print("Do you suffer from any regular disease? (Yes/No): ");
-        String disease = scanner.nextLine();
+        System.out.print("Do you have any food allergies? (e.g., None, Peanuts, Gluten, Dairy): ");
+        String allergies = scanner.nextLine();
+
+        System.out.println("Do you follow any specific diet or have food restrictions?");
+        System.out.println("1. None");
+        System.out.println("2. Vegan");
+        System.out.println("3. Vegetarian");
+        System.out.println("4. Keto");
+        System.out.println("5. Halal");
+        System.out.print("Enter the number corresponding to your diet: ");
+        int foodRestrictionsOption = scanner.nextInt();
+        String foodRestrictions = foodRestrictionsOption == 1 ? "None" : foodRestrictionsOption == 2 ? "Vegan" : foodRestrictionsOption == 3 ? "Vegetarian" : foodRestrictionsOption == 4 ? "Keto" : "Halal";
+
+        System.out.println("What is your primary fitness goal?");
+        System.out.println("1. Lose Weight");
+        System.out.println("2. Gain Muscles");
+        System.out.println("3. Maintain Weight");
+        System.out.print("Enter the number corresponding to your goal: ");
+        int goalOption = scanner.nextInt();
+        String goal = goalOption == 1 ? "Lose Weight" : goalOption == 2 ? "Gain Muscles" : "Maintain Weight";
+
+        // Ask for ideal weight if the goal is weight loss
+        int idealWeight = 0;
+        if (goal.equalsIgnoreCase("Lose Weight")) {
+            System.out.print("Enter your ideal weight (in kg, e.g., 65): ");
+            idealWeight = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
+        }
+
+        System.out.print("Do you suffer from any regular disease? (1. Yes / 2. No): ");
+        int diseaseOption = scanner.nextInt();
+        String disease = diseaseOption == 1 ? "Yes" : "No";
 
         String review = "";
         if (disease.equalsIgnoreCase("Yes")) {
+            scanner.nextLine(); // Consume newline
             System.out.print("Please provide a short review about this survey: ");
             review = scanner.nextLine();
         }
 
         // Generate a dynamic prompt based on user inputs
         String prompt = String.format(
-                "Based on the following user information, generate a detailed personalized diet and exercise plan for 7 days(I want the complete and detailed plans for every day). " +
-                        "The user is %d years old, %s, with a %s work lifestyle. They rate their fast food preference as %d/10, " +
-                        "health as %d/10, and importance of exercise as %d/10. They have %d meals a day, prefer %s workouts, " +
-                        "consume fruits in %d meals, vegetables in %d meals, and eat %d cooked meals per day. They spend %d minutes " +
-                        "in the gym daily. The user %s suffers from a regular disease. " +
+                "Based on the following user information, generate a personalized diet and exercise plan. " +
+                        "The user is %d years old, %s, with a height of %d cm and weight of %d kg. They have a %s work lifestyle. " +
+                        "They rate their fast food preference as %d/10, health as %d/10, and importance of exercise as %d/10. " +
+                        "They have %d meals a day, prefer %s workouts, consume fruits in %d meals, vegetables in %d meals, " +
+                        "and eat %d cooked meals per day. They spend %d minutes in the gym daily. " +
+                        "The user has the following food allergies: %s and follows this diet: %s. " +
+                        "Their primary fitness goal is to %s. " +
+                        (goal.equalsIgnoreCase("Lose Weight") ? "Their ideal weight is %d kg. " : "") +
+                        "The user %s suffers from a regular disease. " +
                         "Please provide a structured and actionable diet and exercise plan tailored to their lifestyle.",
-                age, gender, workPreference, fastFoodRating, healthRating, exerciseImportance, mealsPerDay, exerciseType,
-                fruitMeals, vegetableMeals, cookedMeals, gymTime, disease.equalsIgnoreCase("Yes") ? "does" : "does not"
+                age, gender, height, weight, workPreference, fastFoodRating, healthRating, exerciseImportance, mealsPerDay,
+                exerciseType, fruitMeals, vegetableMeals, cookedMeals, gymTime, allergies, foodRestrictions, goal,
+                (goal.equalsIgnoreCase("Lose Weight") ? idealWeight : null), // Add ideal weight if applicable
+                disease.equalsIgnoreCase("Yes") ? "does" : "does not"
         );
 
         // Create the JSON payload
@@ -81,6 +138,8 @@ public class Main {
                 "{\"model\": \"llama3.2\", " +
                         "\"prompt\": \"%s\", " +
                         "\"age\": %d, " +
+                        "\"height\": %d, " +
+                        "\"weight\": %d, " +
                         "\"gender\": \"%s\", " +
                         "\"workPreference\": \"%s\", " +
                         "\"fastFoodRating\": %d, " +
@@ -88,16 +147,22 @@ public class Main {
                         "\"bodyWeightPreference\": %d, " +
                         "\"exerciseImportance\": %d, " +
                         "\"mealsPerDay\": %d, " +
-                        "\"weight\": %d, " +
                         "\"exerciseType\": \"%s\", " +
                         "\"fruitMeals\": %d, " +
                         "\"vegetableMeals\": %d, " +
                         "\"cookedMeals\": %d, " +
                         "\"gymTime\": %d, " +
+                        "\"allergies\": \"%s\", " +
+                        "\"foodRestrictions\": \"%s\", " +
+                        "\"goal\": \"%s\", " +
+                        (goal.equalsIgnoreCase("Lose Weight") ? "\"idealWeight\": %d, " : "") +
                         "\"disease\": \"%s\", " +
                         "\"review\": \"%s\"}",
-                prompt, age, gender, workPreference, fastFoodRating, healthRating, bodyWeightPreference, exerciseImportance,
-                mealsPerDay, weight, exerciseType, fruitMeals, vegetableMeals, cookedMeals, gymTime, disease, review
+                prompt, age, height, weight, gender, workPreference, fastFoodRating, healthRating, bodyWeightPreference,
+                exerciseImportance, mealsPerDay, exerciseType, fruitMeals, vegetableMeals, cookedMeals, gymTime,
+                allergies, foodRestrictions, goal,
+                (goal.equalsIgnoreCase("Lose Weight") ? idealWeight : null), // Add ideal weight if applicable
+                disease, review
         );
 
         try {
