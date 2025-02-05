@@ -1,97 +1,92 @@
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.json.JSONObject;
-import org.json.JSONArray;
 
 public class Main {
     private static final String BASE_URL = "http://localhost:11434";
-    private static final String DB_URL = "jdbc:h2:tcp://localhost:8082/test";
-    private static final String DB_USER = "sa";
-    private static final String DB_PASSWORD = "";
-    private static final String EMBEDDING_MODEL = "nomic-embed-text";
-    private static final String LLM_MODEL = "llama3.2";
-    private static final List<String> CSV_FILES = List.of("FoodsandBeverages.csv", "megaGymDataset.csv");
+    private static final String EMBEDDING_MODEL = "nomic-embed-text"; // Replace with the correct model name
+    private static final String LLM_MODEL = "llama3.2"; // Replace with the correct LLM model name
 
     public static void main(String[] args) {
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
-            // Step 1: Create embeddings table and process CSV files
-            createEmbeddingTable(conn);
-            for (String csvFile : CSV_FILES) {
-                processCsvFile(csvFile, conn);
-            }
-
-            // Step 2: Collect user inputs
-            String prompt = collectUserInputs();
-
-            // Step 3: Generate embedding for user input and find similar records
-            float[] embedding = getEmbedding(prompt);
-            if (embedding != null) {
-                List<String> similarRecords = findSimilarEmbeddings(conn, embedding, 50);
-                System.out.println("Similar records: " + similarRecords);
-
-                // Step 4: Send prompt and similar data to LLM
-                String response = sendToLLM(prompt + " Similar data: " + similarRecords);
-                System.out.println("Generated plan: " + response);
-            }
-        } catch (SQLException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static void createEmbeddingTable(Connection conn) throws SQLException {
-        try (PreparedStatement stmt = conn.prepareStatement(
-                "CREATE TABLE IF NOT EXISTS embeddings (id INT AUTO_INCREMENT PRIMARY KEY, text CLOB, embedding CLOB)")) {
-            stmt.executeUpdate();
-        }
-    }
-
-    private static void processCsvFile(String csvFile, Connection conn) throws IOException, SQLException {
-        try (FileReader reader = new FileReader("CSV files/" + csvFile);
-             CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
-            for (CSVRecord record : parser) {
-                String text = String.join(", ", record.toMap().values());
-                float[] embedding = getEmbedding(text);
-                if (embedding != null) {
-                    try (PreparedStatement stmt = conn.prepareStatement(
-                            "INSERT INTO embeddings (text, embedding) VALUES (?, ?)")) {
-                        stmt.setString(1, text);
-                        stmt.setString(2, new JSONArray(embedding).toString());
-                        stmt.executeUpdate();
-                    }
-                }
-            }
-        }
-    }
-
-    private static String collectUserInputs() {
         Scanner scanner = new Scanner(System.in);
 
+        // Step 1: Collect user input
+        Map<String, String> userInput = collectUserInput(scanner);
+
+        // Step 2: Load CSV data
+        List<CSVRecord> csvData1 = loadCSV("CSV files/large_food_nutrition.csv");
+        List<CSVRecord> csvData2 = loadCSV("CSV files/sport_exercises.csv");
+
+        // Step 3: Calculate embeddings for CSV data
+        Map<String, float[]> embeddingsMap1 = calculateEmbeddings(csvData1);
+        Map<String, float[]> embeddingsMap2 = calculateEmbeddings(csvData2);
+
+        // Combine embeddings into a single map
+        Map<String, float[]> allEmbeddings = new HashMap<>();
+        allEmbeddings.putAll(embeddingsMap1);
+        allEmbeddings.putAll(embeddingsMap2);
+
+        // Step 4: Calculate user input embedding
+        String userInputText = String.join(" ", userInput.values());
+        float[] userEmbedding = new float[0];
+        try {
+            userEmbedding = getEmbedding(userInputText);
+        } catch (IOException e) {
+            System.err.println("Failed to get embedding for user input: " + e.getMessage());
+            return;
+        }
+
+        // Step 5: Find similar vectors
+        List<String> similarIds = findSimilarVectors(userEmbedding, allEmbeddings, 50);
+
+        // Step 6: Generate enhanced prompt
+        String originalPrompt = generateOriginalPrompt(userInput);
+        Map<String, CSVRecord> recordsMap = new HashMap<>();
+        for (CSVRecord record : csvData1) recordsMap.put(generateKey(record), record);
+        for (CSVRecord record : csvData2) recordsMap.put(generateKey(record), record);
+        String enhancedPrompt = generateEnhancedPrompt(originalPrompt, similarIds, recordsMap);
+
+        // Step 7: Send enhanced prompt to LLM
+        try {
+            String response = sendToLLM(enhancedPrompt);
+            System.out.println("Response from server: " + response);
+        } catch (Exception e) {
+            System.out.println("An error occurred: " + e.getMessage());
+        }
+
+        scanner.close();
+    }
+
+    // Generate a unique key for a CSVRecord
+    private static String generateKey(CSVRecord record) {
+        StringBuilder keyBuilder = new StringBuilder();
+        for (String value : record) {
+            keyBuilder.append(value).append("|");
+        }
+        return keyBuilder.toString();
+    }
+
+    // Step 1: Collect user input
+    private static Map<String, String> collectUserInput(Scanner scanner) {
+        Map<String, String> userInput = new HashMap<>();
+
         System.out.print("Enter your age: ");
-        int age = scanner.nextInt();
-        scanner.nextLine();
+        userInput.put("age", scanner.nextLine());
 
         System.out.print("Enter your height (in cm): ");
-        int height = scanner.nextInt();
-        scanner.nextLine();
+        userInput.put("height", scanner.nextLine());
 
         System.out.print("Enter your weight (in kg): ");
-        int weight = scanner.nextInt();
-        scanner.nextLine();
+        userInput.put("weight", scanner.nextLine());
 
         System.out.println("Select your gender:");
         System.out.println("1. Male");
@@ -99,107 +94,138 @@ public class Main {
         System.out.println("3. Other");
         System.out.print("Enter the number corresponding to your gender: ");
         int genderOption = scanner.nextInt();
-        scanner.nextLine();
+        scanner.nextLine(); // Consume newline
         String gender = genderOption == 1 ? "Male" : genderOption == 2 ? "Female" : "Other";
+        userInput.put("gender", gender);
 
         System.out.println("Select your work lifestyle:");
         System.out.println("1. Sedentary");
         System.out.println("2. Moderate");
         System.out.println("3. Active");
-        System.out.print("Enter the number corresponding to your lifestyle: ");
-        int lifestyleOption = scanner.nextInt();
-        scanner.nextLine();
-        String lifestyle = lifestyleOption == 1 ? "Sedentary" : lifestyleOption == 2 ? "Moderate" : "Active";
+        System.out.print("Enter the number corresponding to your work lifestyle: ");
+        int workPreferenceOption = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
+        String workPreference = workPreferenceOption == 1 ? "Sedentary" : workPreferenceOption == 2 ? "Moderate" : "Active";
+        userInput.put("workPreference", workPreference);
 
-        System.out.print("Rate your preference for fast food (1-10): ");
-        int fastFoodPreference = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("Rate your liking for fast food (1-10): ");
+        userInput.put("fastFoodRating", scanner.nextLine());
 
-        System.out.print("Rate your health (1-10): ");
-        int healthRating = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("Rate your overall health (1-10): ");
+        userInput.put("healthRating", scanner.nextLine());
 
-        System.out.print("Rate the importance of exercise (1-10): ");
-        int exerciseImportance = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("Rate your preference to maintain body weight (1-10): ");
+        userInput.put("bodyWeightPreference", scanner.nextLine());
 
-        System.out.print("How many meals do you eat per day? ");
-        int mealsPerDay = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("Rate the importance of exercise in your life (1-10): ");
+        userInput.put("exerciseImportance", scanner.nextLine());
 
-        System.out.println("What is your preferred exercise type?");
+        System.out.print("How many meals do you have in a day? ");
+        userInput.put("mealsPerDay", scanner.nextLine());
+
+        System.out.println("What type of exercises do you prefer?");
         System.out.println("1. Cardio");
         System.out.println("2. Strength");
         System.out.println("3. Yoga");
         System.out.println("4. Pilates");
-        System.out.print("Enter the number corresponding to your preference: ");
+        System.out.print("Enter the number corresponding to your preferred exercise type: ");
         int exerciseTypeOption = scanner.nextInt();
-        scanner.nextLine();
+        scanner.nextLine(); // Consume newline
         String exerciseType = exerciseTypeOption == 1 ? "Cardio" : exerciseTypeOption == 2 ? "Strength" : exerciseTypeOption == 3 ? "Yoga" : "Pilates";
+        userInput.put("exerciseType", exerciseType);
 
-        System.out.print("How many meals contain fruits? ");
-        int fruitMeals = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("How many meals contain fruits per day? ");
+        userInput.put("fruitMeals", scanner.nextLine());
 
-        System.out.print("How many meals contain vegetables? ");
-        int vegetableMeals = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("How many meals contain vegetables per day? ");
+        userInput.put("vegetableMeals", scanner.nextLine());
 
         System.out.print("How many cooked meals do you eat per day? ");
-        int cookedMeals = scanner.nextInt();
-        scanner.nextLine();
+        userInput.put("cookedMeals", scanner.nextLine());
 
-        System.out.print("How much time do you spend in the gym daily (in minutes)? ");
-        int gymTime = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("How much time do you spend in the gym per day (in minutes)? ");
+        userInput.put("gymTime", scanner.nextLine());
 
-        System.out.print("Do you have any allergies? ");
-        String allergies = scanner.nextLine();
+        System.out.print("Do you have any food allergies? (e.g., None, Peanuts, Gluten, Dairy): ");
+        userInput.put("allergies", scanner.nextLine());
 
-        System.out.println("Do you follow a specific diet?");
+        System.out.println("Do you follow any specific diet or have food restrictions?");
         System.out.println("1. None");
         System.out.println("2. Vegan");
         System.out.println("3. Vegetarian");
         System.out.println("4. Keto");
         System.out.println("5. Halal");
         System.out.print("Enter the number corresponding to your diet: ");
-        int dietOption = scanner.nextInt();
-        scanner.nextLine();
-        String diet = dietOption == 1 ? "None" : dietOption == 2 ? "Vegan" : dietOption == 3 ? "Vegetarian" : dietOption == 4 ? "Keto" : "Halal";
+        int foodRestrictionsOption = scanner.nextInt();
+        scanner.nextLine(); // Consume newline
+        String foodRestrictions = foodRestrictionsOption == 1 ? "None" : foodRestrictionsOption == 2 ? "Vegan" : foodRestrictionsOption == 3 ? "Vegetarian" : foodRestrictionsOption == 4 ? "Keto" : "Halal";
+        userInput.put("foodRestrictions", foodRestrictions);
 
         System.out.println("What is your primary fitness goal?");
         System.out.println("1. Lose Weight");
-        System.out.println("2. Gain Muscle");
+        System.out.println("2. Gain Muscles");
         System.out.println("3. Maintain Weight");
         System.out.print("Enter the number corresponding to your goal: ");
         int goalOption = scanner.nextInt();
-        scanner.nextLine();
-        String goal = goalOption == 1 ? "Lose Weight" : goalOption == 2 ? "Gain Muscle" : "Maintain Weight";
+        scanner.nextLine(); // Consume newline
+        String goal = goalOption == 1 ? "Lose Weight" : goalOption == 2 ? "Gain Muscles" : "Maintain Weight";
+        userInput.put("goal", goal);
 
-        int idealWeight = 0;
-        if (goal.equals("Lose Weight")) {
-            System.out.print("Enter your ideal weight: ");
-            idealWeight = scanner.nextInt();
-            scanner.nextLine();
-        }
-
-        System.out.print("Do you have any regular diseases? (Yes/No): ");
-        String disease = scanner.nextLine();
-
-        System.out.print("Do you have any additional comments about this survey? ");
-        String comments = scanner.nextLine();
-
-        String prompt = String.format("User information: %d years old, %s, %d cm tall, %d kg, %s lifestyle. " +
-                        "Fast food preference: %d/10, Health: %d/10, Exercise: %d/10. " +
-                        "%d meals/day, %d fruit meals, %d vegetable meals, %d cooked meals, %d min gym time. " +
-                        "Allergies: %s, Diet: %s, Goal: %s, Diseases: %s, Comments: %s",
-                age, gender, height, weight, lifestyle, fastFoodPreference, healthRating, exerciseImportance,
-                mealsPerDay, fruitMeals, vegetableMeals, cookedMeals, gymTime, allergies, diet, goal, disease, comments);
-
-        scanner.close();
-        return prompt; // Return the constructed prompt
+        return userInput;
     }
 
+    // Step 2: Load CSV data
+    private static List<CSVRecord> loadCSV(String filePath) {
+        List<CSVRecord> records = new ArrayList<>();
+        try (Reader reader = new FileReader(filePath)) {
+            CSVFormat format = CSVFormat.DEFAULT
+                    .withFirstRecordAsHeader()
+                    .withIgnoreSurroundingSpaces(true)
+                    .withTrim()
+                    .withIgnoreEmptyLines(true); // Skip empty lines
+
+            CSVParser parser = new CSVParser(reader, format);
+
+            int lineNumber = 0; // Keep track of line numbers for debugging
+            for (CSVRecord record : parser) {
+                lineNumber++;
+                try {
+                    // Add valid records to the list
+                    records.add(record);
+                } catch (Exception ex) {
+                    // Log the problematic record for debugging and skip it
+                    System.err.println("Skipping invalid record at line " + lineNumber + ": " + record);
+                    ex.printStackTrace();
+                }
+            }
+        } catch (IOException e) {
+            // Handle file-level errors
+            System.err.println("Error reading CSV file: " + filePath);
+            e.printStackTrace();
+        }
+        return records;
+    }
+
+    // Step 3: Calculate embeddings for CSV data
+    private static Map<String, float[]> calculateEmbeddings(List<CSVRecord> records) {
+        Map<String, float[]> embeddingsMap = new HashMap<>();
+        for (CSVRecord record : records) {
+            try {
+                // Generate a unique key by concatenating all values in the record
+                String key = generateKey(record);
+
+                // Generate embedding for the entire record
+                String text = record.toString();
+                float[] embedding = getEmbedding(text);
+                embeddingsMap.put(key, embedding);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return embeddingsMap;
+    }
+
+    // Step 4: Get embedding for a given text
     private static float[] getEmbedding(String text) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(BASE_URL + "/api/embeddings").openConnection();
         connection.setRequestMethod("POST");
@@ -216,35 +242,95 @@ public class Main {
 
         if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
             Scanner scanner = new Scanner(connection.getInputStream(), StandardCharsets.UTF_8);
-            StringBuilder response = new StringBuilder();
-            while (scanner.hasNext()) {
-                response.append(scanner.nextLine());
+            StringBuilder responseBuilder = new StringBuilder();
+            while (scanner.hasNextLine()) {
+                responseBuilder.append(scanner.nextLine());
             }
-            JSONArray embeddingArray = new JSONObject(response.toString()).getJSONArray("embedding");
-            float[] embedding = new float[embeddingArray.length()];
-            for (int i = 0; i < embeddingArray.length(); i++) {
-                embedding[i] = embeddingArray.getFloat(i);
-            }
-            return embedding;
+            scanner.close();
+
+            JSONObject responseJson = new JSONObject(responseBuilder.toString());
+            return parseEmbedding(responseJson);
+        } else {
+            throw new IOException("Failed to get embedding. Response code: " + connection.getResponseCode());
         }
-        return null;
     }
 
-    private static List<String> findSimilarEmbeddings(Connection conn, float[] embedding, int limit) throws SQLException {
-        List<String> similarRecords = new ArrayList<>();
-        // Implement proper similarity search (e.g., cosine similarity)
-        try (PreparedStatement stmt = conn.prepareStatement("SELECT text FROM embeddings LIMIT ?")) {
-            stmt.setInt(1, limit);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    similarRecords.add(rs.getString("text"));
-                }
-            }
+    // Parse embedding from JSON response
+    private static float[] parseEmbedding(JSONObject responseJson) {
+        List<Object> embeddingList = responseJson.getJSONArray("embedding").toList();
+        float[] embedding = new float[embeddingList.size()];
+        for (int i = 0; i < embeddingList.size(); i++) {
+            embedding[i] = ((Number) embeddingList.get(i)).floatValue();
         }
-        return similarRecords;
+        return embedding;
     }
 
-    private static String sendToLLM(String prompt) throws IOException {
+    // Step 5: Find similar vectors
+    private static List<String> findSimilarVectors(float[] userEmbedding, Map<String, float[]> embeddingsMap, int topK) {
+        Map<String, Double> similarityScores = new HashMap<>();
+        for (Map.Entry<String, float[]> entry : embeddingsMap.entrySet()) {
+            String id = entry.getKey();
+            float[] embedding = entry.getValue();
+            double similarity = cosineSimilarity(userEmbedding, embedding);
+            similarityScores.put(id, similarity);
+        }
+
+        List<Map.Entry<String, Double>> sortedEntries = new ArrayList<>(similarityScores.entrySet());
+        sortedEntries.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
+
+        List<String> topKIds = new ArrayList<>();
+        for (int i = 0; i < Math.min(topK, sortedEntries.size()); i++) {
+            topKIds.add(sortedEntries.get(i).getKey());
+        }
+        return topKIds;
+    }
+
+    // Calculate cosine similarity
+    private static double cosineSimilarity(float[] vectorA, float[] vectorB) {
+        double dotProduct = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < vectorA.length; i++) {
+            dotProduct += vectorA[i] * vectorB[i];
+            normA += Math.pow(vectorA[i], 2);
+            normB += Math.pow(vectorB[i], 2);
+        }
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    // Step 6: Generate enhanced prompt
+    private static String generateEnhancedPrompt(String originalPrompt, List<String> similarIds, Map<String, CSVRecord> recordsMap) {
+        StringBuilder enhancedPrompt = new StringBuilder(originalPrompt);
+        enhancedPrompt.append("\n\nRelevant Data:\n");
+        for (String id : similarIds) {
+            CSVRecord record = recordsMap.get(id);
+            enhancedPrompt.append(record.toString()).append("\n");
+        }
+        return enhancedPrompt.toString();
+    }
+
+    // Generate original prompt from user input
+    private static String generateOriginalPrompt(Map<String, String> userInput) {
+        return String.format(
+                "Based on the following user information, generate a detailed personalized diet and exercise plan.(please give complete plans for every day of week for meals and workout sessions. I want plan for every single day of week. and please mention the amount of every ingredients of suplements in diet plan.) " +
+                        "The user is %s years old, %s, with a height of %s cm and weight of %s kg. They have a %s work lifestyle. " +
+                        "They rate their fast food preference as %s/10, health as %s/10, and importance of exercise as %s/10. " +
+                        "They have %s meals a day, prefer %s workouts, consume fruits in %s meals, vegetables in %s meals, " +
+                        "and eat %s cooked meals per day. They spend %s minutes in the gym daily. " +
+                        "The user has the following food allergies: %s and follows this diet: %s. " +
+                        "Their primary fitness goal is to %s. " +
+                        "Please provide a structured and actionable diet and exercise plan tailored to their lifestyle.",
+                userInput.get("age"), userInput.get("gender"), userInput.get("height"), userInput.get("weight"),
+                userInput.get("workPreference"), userInput.get("fastFoodRating"), userInput.get("healthRating"),
+                userInput.get("exerciseImportance"), userInput.get("mealsPerDay"), userInput.get("exerciseType"),
+                userInput.get("fruitMeals"), userInput.get("vegetableMeals"), userInput.get("cookedMeals"),
+                userInput.get("gymTime"), userInput.get("allergies"), userInput.get("foodRestrictions"),
+                userInput.get("goal")
+        );
+    }
+
+    // Step 7: Send prompt to LLM
+    private static String sendToLLM(String prompt) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(BASE_URL + "/api/generate").openConnection();
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
@@ -260,12 +346,19 @@ public class Main {
 
         if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
             Scanner scanner = new Scanner(connection.getInputStream(), StandardCharsets.UTF_8);
-            StringBuilder response = new StringBuilder();
-            while (scanner.hasNext()) {
-                response.append(scanner.nextLine());
+            StringBuilder responseBuilder = new StringBuilder();
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                JSONObject jsonObject = new JSONObject(line);
+                responseBuilder.append(jsonObject.getString("response"));
+                if (jsonObject.getBoolean("done")) {
+                    break;
+                }
             }
-            return response.toString();
+            scanner.close();
+            return responseBuilder.toString();
+        } else {
+            throw new RuntimeException("Failed to send request. Response code: " + connection.getResponseCode());
         }
-        return null;
     }
 }
